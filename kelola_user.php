@@ -11,16 +11,63 @@ if (isset($_POST['tambah_user'])) {
     $username = trim($_POST['username']);
     $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
     $role     = $_POST['role'];
+    $foto     = null;
 
-    $cek = $koneksi->prepare("SELECT id FROM users WHERE username = ?");
-    $cek->execute([$username]);
-    if ($cek->fetch()) {
-        $error = "Username sudah terdaftar!";
-    } else {
-        $stmt = $koneksi->prepare("INSERT INTO users (nama, username, password, role) VALUES (?, ?, ?, ?)");
-        $stmt->execute([$nama, $username, $password, $role]);
-        $pesan = "Pengguna baru berhasil ditambahkan!";
+    if (isset($_FILES['foto']) && $_FILES['foto']['error'] === UPLOAD_ERR_OK) {
+        $upload = simpanUploadFoto($_FILES['foto']);
+        if (isset($upload['error'])) {
+            $error = $upload['error'];
+        } else {
+            $foto = $upload['filename'];
+        }
     }
+
+    if (!$error) {
+        $cek = $koneksi->prepare("SELECT id FROM users WHERE username = ?");
+        $cek->execute([$username]);
+        if ($cek->fetch()) {
+            $error = "Username sudah terdaftar!";
+        } else {
+            $stmt = $koneksi->prepare("INSERT INTO users (nama, username, password, role, foto) VALUES (?, ?, ?, ?, ?)");
+            $stmt->execute([$nama, $username, $password, $role, $foto]);
+            $pesan = "Pengguna baru berhasil ditambahkan!";
+        }
+    }
+}
+
+// Handler ganti foto pengguna oleh admin
+if (isset($_POST['ganti_foto'])) {
+    $id_user = (int) $_POST['id_user'];
+    $foto_baru = null;
+
+    if (!empty($_POST['preset_avatar'])) {
+        $foto_baru = trim($_POST['preset_avatar']);
+    }
+
+    if (isset($_FILES['foto_edit']) && $_FILES['foto_edit']['error'] === UPLOAD_ERR_OK) {
+        $upload = simpanUploadFoto($_FILES['foto_edit']);
+        if (isset($upload['error'])) {
+            $error = $upload['error'];
+        } else {
+            $foto_baru = $upload['filename'];
+        }
+    }
+
+    if (!$error && $foto_baru !== null) {
+        $stmt = $koneksi->prepare("UPDATE users SET foto = ? WHERE id = ?");
+        $stmt->execute([$foto_baru, $id_user]);
+        $pesan = "Foto profil pengguna berhasil diperbarui!";
+    } elseif (!$error && $foto_baru === null) {
+        $error = "Pilih file gambar atau salah satu preset foto!";
+    }
+}
+
+// Handler reset foto ke acak
+if (isset($_POST['reset_foto'])) {
+    $id_user = (int) $_POST['id_user'];
+    $stmt = $koneksi->prepare("UPDATE users SET foto = NULL WHERE id = ?");
+    $stmt->execute([$id_user]);
+    $pesan = "Foto profil pengguna telah direset ke foto acak default!";
 }
 
 if (isset($_GET['hapus'])) {
@@ -33,8 +80,9 @@ if (isset($_GET['hapus'])) {
     }
 }
 
-$stmt = $koneksi->query("SELECT id, nama, username, role FROM users ORDER BY id ASC");
+$stmt = $koneksi->query("SELECT id, nama, username, role, foto FROM users ORDER BY id ASC");
 $daftar_user = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$presets_list = getAvatarPresets();
 ?>
 <!DOCTYPE html>
 <html lang="id" data-bs-theme="dark">
@@ -108,7 +156,7 @@ $daftar_user = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <div class="col-lg-4">
             <div class="sp-form-card">
                 <h5 class="fw-bold mb-3">+ Buat Akun Pengguna</h5>
-                <form method="POST">
+                <form method="POST" enctype="multipart/form-data">
                     <div class="mb-3">
                         <label class="form-label small text-secondary fw-bold">Nama Lengkap</label>
                         <input type="text" name="nama" class="form-control sp-input" placeholder="Nama lengkap" required>
@@ -121,13 +169,18 @@ $daftar_user = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <label class="form-label small text-secondary fw-bold">Password</label>
                         <input type="password" name="password" class="form-control sp-input" placeholder="Password" required>
                     </div>
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="form-label small text-secondary fw-bold">Role Pengguna</label>
                         <select name="role" class="form-select sp-input" required>
                             <option value="siswa">Siswa</option>
                             <option value="petugas">Petugas</option>
                             <option value="admin">Admin</option>
                         </select>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label small text-secondary fw-bold">Foto Profil (Opsional)</label>
+                        <input type="file" name="foto" class="form-control sp-input" accept="image/jpeg,image/png,image/webp">
+                        <div class="form-text text-secondary" style="font-size: 0.72rem;">Unggah foto JPG/PNG (Maks 3MB). Jika kosong, foto acak akan dibuat otomatis.</div>
                     </div>
                     <button type="submit" name="tambah_user" class="btn-sp-green w-100">Simpan Pengguna</button>
                 </form>
@@ -142,22 +195,8 @@ $daftar_user = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
 
             <?php
-            $avatar_images = [
-                'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80',
-                'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&h=150&q=80',
-                'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80',
-                'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
-                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80',
-                'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=150&h=150&q=80',
-                'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&h=150&q=80',
-                'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=150&h=150&q=80',
-                'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&w=150&h=150&q=80',
-                'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&h=150&q=80',
-                'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=150&h=150&q=80',
-                'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=150&h=150&q=80'
-            ];
             foreach ($daftar_user as $index => $u):
-                $userImg = $avatar_images[(abs((int)$u['id'] - 1)) % count($avatar_images)];
+                $userImg = getFotoUser($u['foto'] ?? '', $u['id'], $u['username']);
             ?>
             <div class="sp-track-row d-flex justify-content-between align-items-center">
                 <div class="d-flex align-items-center gap-3">
@@ -171,21 +210,127 @@ $daftar_user = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <div class="text-secondary small">@<?= htmlspecialchars($u['username']) ?></div>
                     </div>
                 </div>
-                <div class="d-flex align-items-center gap-3">
+                <div class="d-flex align-items-center gap-2">
                     <span class="badge rounded-pill bg-dark border border-secondary text-uppercase px-3 py-1">
                         <?= htmlspecialchars($u['role']) ?>
                     </span>
+                    <button type="button" class="btn btn-sm btn-outline-info rounded-pill px-3" onclick="bukaModalFoto(<?= $u['id'] ?>, '<?= htmlspecialchars(addslashes($u['nama'])) ?>', '<?= htmlspecialchars($userImg) ?>')">
+                        <i class="bi bi-camera-fill me-1"></i> Ganti Foto
+                    </button>
                     <?php if ((int)$u['id'] !== (int)$_SESSION['user_id']): ?>
                         <a href="kelola_user.php?hapus=<?= $u['id'] ?>" class="btn btn-sm btn-outline-danger rounded-pill px-3" onclick="return confirm('Hapus pengguna ini?')">
                             Hapus
                         </a>
                     <?php else: ?>
-                        <span class="text-success small fw-bold">Aktif</span>
+                        <span class="text-success small fw-bold px-2">Aktif</span>
                     <?php endif; ?>
                 </div>
             </div>
             <?php endforeach; ?>
         </div>
+    </div>
+</div>
+
+<!-- Modal Ganti Foto Pengguna -->
+<div class="modal fade" id="modalGantiFoto" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background-color: #18181f; border: 1px solid #333; color: #fff; border-radius: 14px;">
+            <div class="modal-header border-secondary border-opacity-25">
+                <h5 class="modal-title fw-bold">Ganti Foto Profil</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="id_user" id="modalIdUser">
+                <input type="hidden" name="preset_avatar" id="modalPresetAvatar" value="">
+                
+                <div class="modal-body text-center p-4">
+                    <!-- Preview Foto Saat Ini -->
+                    <div class="mb-3">
+                        <img id="modalPreviewImg" src="" alt="Preview" class="rounded-circle shadow" style="width: 100px; height: 100px; object-fit: cover; border: 3px solid #1ed760;">
+                        <div class="fw-bold mt-2 text-white" id="modalUserName"></div>
+                    </div>
+
+                    <!-- Opsi 1: Upload File Baru dari Komputer -->
+                    <div class="text-start mb-4">
+                        <label class="form-label small fw-bold text-secondary">Unggah File Foto Baru:</label>
+                        <input type="file" name="foto_edit" id="inputFotoEdit" class="form-control sp-input" accept="image/jpeg,image/png,image/webp" onchange="previewFile(this)">
+                        <div class="form-text text-secondary" style="font-size: 0.72rem;">Format: JPG, PNG, WEBP (Maks 3MB).</div>
+                    </div>
+
+                    <!-- Opsi 2: Pilih Preset Avatar Cepat -->
+                    <div class="text-start mb-2">
+                        <label class="form-label small fw-bold text-secondary">Atau Pilih dari Koleksi Avatar Cepat:</label>
+                        <div class="d-flex flex-wrap gap-2 justify-content-center p-2 rounded-3" style="background-color: #121216;">
+                            <?php foreach ($presets_list as $idx => $preset): ?>
+                                <img src="<?= $preset ?>" alt="Avatar <?= $idx+1 ?>" class="preset-choice rounded-circle" style="width: 44px; height: 44px; object-fit: cover; cursor: pointer; border: 2px solid transparent; transition: all 0.2s;" onclick="pilihPreset(this, '<?= $preset ?>')" title="Pilih foto ini">
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-footer border-secondary border-opacity-25 d-flex justify-content-between">
+                    <button type="submit" name="reset_foto" class="btn btn-outline-danger btn-sm rounded-pill px-3" onclick="return confirm('Kembalikan foto pengguna ini ke foto acak default?')">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i> Reset ke Foto Acak
+                    </button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" name="ganti_foto" class="btn-sp-green btn-sm px-4">Simpan Foto</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let modalFotoInstance = null;
+function bukaModalFoto(id, nama, fotoUrl) {
+    document.getElementById('modalIdUser').value = id;
+    document.getElementById('modalUserName').innerText = nama;
+    document.getElementById('modalPreviewImg').src = fotoUrl;
+    document.getElementById('modalPresetAvatar').value = '';
+    document.getElementById('inputFotoEdit').value = '';
+    
+    document.querySelectorAll('.preset-choice').forEach(el => {
+        el.style.borderColor = 'transparent';
+        el.style.transform = 'scale(1)';
+    });
+
+    if (!modalFotoInstance) {
+        modalFotoInstance = new bootstrap.Modal(document.getElementById('modalGantiFoto'));
+    }
+    modalFotoInstance.show();
+}
+
+function pilihPreset(imgEl, url) {
+    document.getElementById('modalPresetAvatar').value = url;
+    document.getElementById('modalPreviewImg').src = url;
+    document.getElementById('inputFotoEdit').value = '';
+    
+    document.querySelectorAll('.preset-choice').forEach(el => {
+        el.style.borderColor = 'transparent';
+        el.style.transform = 'scale(1)';
+    });
+    imgEl.style.borderColor = '#1ed760';
+    imgEl.style.transform = 'scale(1.15)';
+}
+
+function previewFile(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('modalPreviewImg').src = e.target.result;
+            document.getElementById('modalPresetAvatar').value = '';
+            document.querySelectorAll('.preset-choice').forEach(el => {
+                el.style.borderColor = 'transparent';
+                el.style.transform = 'scale(1)';
+            });
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+</script>
     </div>
 </div>
 

@@ -38,21 +38,43 @@ if (isset($_POST['ubah_password'])) {
 
 $inisial = strtoupper(substr($_SESSION['nama'], 0, 2));
 
-$avatar_images = [
-    'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&h=300&q=80',
-    'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=300&h=300&q=80',
-    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&h=300&q=80',
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&h=300&q=80',
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&h=300&q=80',
-    'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=300&h=300&q=80',
-    'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&h=300&q=80',
-    'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=300&h=300&q=80',
-    'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&w=300&h=300&q=80',
-    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&h=300&q=80',
-    'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&h=300&q=80',
-    'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=300&h=300&q=80'
-];
-$userImg = $avatar_images[(abs((int)$_SESSION['user_id'] - 1)) % count($avatar_images)];
+$stmt = $koneksi->prepare("SELECT foto FROM users WHERE id = ?");
+$stmt->execute([$_SESSION['user_id']]);
+$userDB = $stmt->fetch(PDO::FETCH_ASSOC);
+$currentFoto = $userDB['foto'] ?? null;
+
+if (isset($_POST['ubah_foto'])) {
+    $foto_baru = null;
+    if (!empty($_POST['preset_avatar'])) {
+        $foto_baru = trim($_POST['preset_avatar']);
+    }
+    if (isset($_FILES['foto']) && $_FILES['foto']['error'] === UPLOAD_ERR_OK) {
+        $upload = simpanUploadFoto($_FILES['foto']);
+        if (isset($upload['error'])) {
+            $error = $upload['error'];
+        } else {
+            $foto_baru = $upload['filename'];
+        }
+    }
+    if (!$error && $foto_baru !== null) {
+        $stmt = $koneksi->prepare("UPDATE users SET foto = ? WHERE id = ?");
+        $stmt->execute([$foto_baru, $_SESSION['user_id']]);
+        $pesan = "Foto profil Anda berhasil diperbarui!";
+        $currentFoto = $foto_baru;
+    } elseif (!$error && $foto_baru === null) {
+        $error = "Pilih file gambar atau salah satu foto preset!";
+    }
+}
+
+if (isset($_POST['reset_foto_profil'])) {
+    $stmt = $koneksi->prepare("UPDATE users SET foto = NULL WHERE id = ?");
+    $stmt->execute([$_SESSION['user_id']]);
+    $pesan = "Foto profil telah dikembalikan ke foto acak default!";
+    $currentFoto = null;
+}
+
+$userImg = getFotoUser($currentFoto, $_SESSION['user_id'], $_SESSION['username']);
+$presets_list = getAvatarPresets();
 ?>
 <!DOCTYPE html>
 <html lang="id" data-bs-theme="dark">
@@ -149,6 +171,51 @@ $userImg = $avatar_images[(abs((int)$_SESSION['user_id'] - 1)) % count($avatar_i
         <?php endif; ?>
 
         <div class="row g-4">
+            <!-- Panel 1: Ubah Foto Profil -->
+            <div class="col-12">
+                <div class="sp-panel">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
+                        <div>
+                            <h5 class="fw-bold mb-1"><i class="bi bi-camera-fill text-success me-2"></i>Ubah Foto Profil</h5>
+                            <p class="text-secondary small mb-0">Unggah foto baru dari komputer Anda atau pilih salah satu foto avatar cepat di bawah.</p>
+                        </div>
+                        <?php if (!empty($currentFoto)): ?>
+                            <form method="POST" class="m-0">
+                                <button type="submit" name="reset_foto_profil" class="btn btn-outline-danger btn-sm rounded-pill px-3" onclick="return confirm('Kembalikan foto profil Anda ke foto acak default?')">
+                                    <i class="bi bi-arrow-counterclockwise me-1"></i> Reset ke Foto Acak
+                                </button>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+
+                    <form method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="preset_avatar" id="profilPresetAvatar" value="">
+                        
+                        <div class="row g-3 align-items-center mb-3">
+                            <div class="col-auto">
+                                <img id="profilPreviewImg" src="<?= htmlspecialchars($userImg) ?>" alt="Preview" class="rounded-circle shadow" style="width: 72px; height: 72px; object-fit: cover; border: 3px solid #1ed760;">
+                            </div>
+                            <div class="col">
+                                <label class="form-label small text-secondary fw-bold">Pilih File Foto Baru dari Komputer:</label>
+                                <input type="file" name="foto" id="inputFotoProfil" class="form-control sp-input" accept="image/jpeg,image/png,image/webp" onchange="previewProfilFile(this)">
+                                <div class="form-text text-secondary" style="font-size: 0.72rem;">Format: JPG, PNG, WEBP (Maks 3MB).</div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small text-secondary fw-bold">Atau Pilih dari Koleksi Foto Avatar Cepat:</label>
+                            <div class="d-flex flex-wrap gap-2 p-2 rounded-3" style="background-color: #121216;">
+                                <?php foreach ($presets_list as $idx => $preset): ?>
+                                    <img src="<?= $preset ?>" alt="Avatar <?= $idx+1 ?>" class="profil-preset-choice rounded-circle" style="width: 44px; height: 44px; object-fit: cover; cursor: pointer; border: 2px solid transparent; transition: all 0.2s;" onclick="pilihPresetProfil(this, '<?= $preset ?>')" title="Pilih foto ini">
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+
+                        <button type="submit" name="ubah_foto" class="btn-sp-green">Simpan Foto Profil</button>
+                    </form>
+                </div>
+            </div>
+
             <div class="col-md-6">
                 <div class="sp-panel">
                     <h5 class="fw-bold mb-3">Ubah Nama Pengguna</h5>
@@ -182,5 +249,34 @@ $userImg = $avatar_images[(abs((int)$_SESSION['user_id'] - 1)) % count($avatar_i
     </div>
 </div>
 
+<script>
+function pilihPresetProfil(imgEl, url) {
+    document.getElementById('profilPresetAvatar').value = url;
+    document.getElementById('profilPreviewImg').src = url;
+    document.getElementById('inputFotoProfil').value = '';
+    
+    document.querySelectorAll('.profil-preset-choice').forEach(el => {
+        el.style.borderColor = 'transparent';
+        el.style.transform = 'scale(1)';
+    });
+    imgEl.style.borderColor = '#1ed760';
+    imgEl.style.transform = 'scale(1.15)';
+}
+
+function previewProfilFile(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('profilPreviewImg').src = e.target.result;
+            document.getElementById('profilPresetAvatar').value = '';
+            document.querySelectorAll('.profil-preset-choice').forEach(el => {
+                el.style.borderColor = 'transparent';
+                el.style.transform = 'scale(1)';
+            });
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+</script>
 </body>
 </html>

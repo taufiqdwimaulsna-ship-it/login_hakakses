@@ -4,7 +4,7 @@ require 'config.php';
 cekRole('admin');
 
 // Ambil daftar pengguna dari database untuk ditampilkan di bagian "Pengguna Terdaftar (Gaya Artis Populer)"
-$stmt = $koneksi->query("SELECT id, nama, username, role FROM users ORDER BY id ASC");
+$stmt = $koneksi->query("SELECT id, nama, username, role, foto FROM users ORDER BY id ASC");
 $daftar_user = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $total_user    = count($daftar_user);
@@ -396,20 +396,6 @@ $total_siswa   = $koneksi->query("SELECT COUNT(*) FROM users WHERE role='siswa'"
 
         <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-xl-6 g-3">
             <?php
-            $avatar_images = [
-                'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&h=300&q=80',
-                'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=300&h=300&q=80',
-                'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&h=300&q=80',
-                'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&h=300&q=80',
-                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&h=300&q=80',
-                'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=300&h=300&q=80',
-                'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=300&h=300&q=80',
-                'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=300&h=300&q=80',
-                'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&w=300&h=300&q=80',
-                'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&h=300&q=80',
-                'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&h=300&q=80',
-                'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=300&h=300&q=80'
-            ];
             $gradients = [
                 'admin'   => 'linear-gradient(135deg, #e91429, #8c1932)',
                 'petugas' => 'linear-gradient(135deg, #1ed760, #117a37)',
@@ -418,7 +404,7 @@ $total_siswa   = $koneksi->query("SELECT COUNT(*) FROM users WHERE role='siswa'"
             foreach ($daftar_user as $u):
                 $inisial = strtoupper(substr($u['nama'], 0, 2));
                 $bgGrad = $gradients[$u['role']] ?? 'linear-gradient(135deg, #509bf5, #2b568a)';
-                $userImg = $avatar_images[(abs((int)$u['id'] - 1)) % count($avatar_images)];
+                $userImg = getFotoUser($u['foto'] ?? '', $u['id'], $u['username']);
             ?>
             <div class="col item-searchable">
                 <a href="kelola_user.php" class="sp-card">

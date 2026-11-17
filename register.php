@@ -1,6 +1,7 @@
 <?php
 session_start();
 require 'config.php';
+require 'auth.php';
 
 if (isset($_SESSION['user_id'])) {
     header("Location: dashboard.php");
@@ -30,12 +31,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Username sudah digunakan, pilih username lain!";
         } else {
             $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-            $sql = "INSERT INTO users (nama, username, password, role) VALUES (?, ?, ?, ?)";
-            $stmt = $koneksi->prepare($sql);
-            $stmt->execute([$nama, $username, $passwordHash, $role]);
+            $foto = null;
 
-            header("Location: index.php?registered=1");
-            exit;
+            if (isset($_FILES['foto']) && $_FILES['foto']['error'] === UPLOAD_ERR_OK) {
+                $upload = simpanUploadFoto($_FILES['foto']);
+                if (isset($upload['error'])) {
+                    $error = $upload['error'];
+                } else {
+                    $foto = $upload['filename'];
+                }
+            }
+
+            if (!$error) {
+                $sql = "INSERT INTO users (nama, username, password, role, foto) VALUES (?, ?, ?, ?, ?)";
+                $stmt = $koneksi->prepare($sql);
+                $stmt->execute([$nama, $username, $passwordHash, $role, $foto]);
+
+                header("Location: index.php?registered=1");
+                exit;
+            }
         }
     }
 }
@@ -134,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     <?php endif; ?>
 
-    <form action="register.php" method="POST">
+    <form action="register.php" method="POST" enctype="multipart/form-data">
         <div class="mb-3">
             <label class="form-label small fw-bold">Nama Lengkap</label>
             <input type="text" name="nama" class="form-control sp-input" placeholder="Masukkan nama lengkap" value="<?= htmlspecialchars($_POST['nama'] ?? '') ?>" required>
@@ -153,13 +167,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input type="password" name="konfirmasi_password" class="form-control sp-input" placeholder="Ulangi" required>
             </div>
         </div>
-        <div class="mb-4">
+        <div class="mb-3">
             <label class="form-label small fw-bold">Role Pengguna</label>
             <select name="role" class="form-select sp-input" required>
                 <option value="siswa" selected>Siswa (Akses Akademik Pribadi)</option>
                 <option value="petugas">Petugas (Akses Data Operasional)</option>
                 <option value="admin">Admin (Pengelola Penuh)</option>
             </select>
+        </div>
+        <div class="mb-4">
+            <label class="form-label small fw-bold">Foto Profil (Opsional)</label>
+            <input type="file" name="foto" class="form-control sp-input" accept="image/jpeg,image/png,image/webp">
+            <div class="form-text text-secondary" style="font-size: 0.72rem;">Unggah JPG/PNG (Maks 3MB). Jika kosong, foto profil acak akan dibuat otomatis.</div>
         </div>
         <button type="submit" class="btn btn-sp-green w-100 mb-3">Daftar Sekarang</button>
     </form>
